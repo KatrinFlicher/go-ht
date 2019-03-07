@@ -45,25 +45,40 @@ func list(f *os.File) []byte {
 	return bytes
 }
 
-//./main.go -operation "add" -item '{\"id\": \"1\", \"email\": \"email@test.com\", \"age\": 23}' -fileName "users.json"
-
 func Perform(args Arguments, writer io.Writer) (err error) {
-	if args["filename"] == "" {
+	filename := args["filename"]
+	operation := args["operation"]
+	if operation == "" {
+		return fmt.Errorf("-operation flag has to be specified")
+	}
+
+	if filename == "" {
 		return fmt.Errorf("-fileName flag has to be specified")
 	}
-	if args["operation"] == "" {
-		return errors.New("-operation flag has to be specified")
-	}
-	f, err := os.Open(args["filename"])
+
+	f, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0644)
 	check(err)
 	defer f.Close()
-	switch args["operation"] {
+	switch operation {
 	case "add":
 		item := args["item"]
 		if item == "" {
-			return errors.New("-item flag has to be specified")
+			return fmt.Errorf("-item flag has to be specified")
 		}
-		_, err := f.Write([]byte(item))
+		var user User
+		err = json.Unmarshal([]byte(item), &user)
+		var users []User
+		err = json.Unmarshal(list(f), &users)
+		for _, value := range users {
+			if value.id == user.id {
+				return fmt.Errorf("Item with id %s already exists", user.id)
+			}
+		}
+		users = append(users, user)
+		bytes, err := json.Marshal(users)
+		check(err)
+		err = ioutil.WriteFile(filename, bytes, 0644)
+		check(err)
 		check(err)
 	case "remove":
 		id := args["id"]
@@ -79,7 +94,7 @@ func Perform(args Arguments, writer io.Writer) (err error) {
 		}
 		bytes, err := json.Marshal(users)
 		check(err)
-		err = ioutil.WriteFile(args["filename"], bytes, 0644)
+		err = ioutil.WriteFile(filename, bytes, 0644)
 		check(err)
 	case "list":
 		users := list(f)
@@ -103,7 +118,7 @@ func Perform(args Arguments, writer io.Writer) (err error) {
 		_, err = writer.Write(bytes)
 		check(err)
 	default:
-		return fmt.Errorf("Operation %s not allowed!", args["operation"])
+		return fmt.Errorf("Operation %s not allowed!", operation)
 	}
 	return
 
