@@ -45,7 +45,7 @@ func list(f *os.File) []byte {
 	return bytes
 }
 
-func Perform(args Arguments, writer io.Writer) (err error) {
+func Perform(args Arguments, writer io.Writer) (error error) {
 	filename := args["fileName"]
 	operation := args["operation"]
 	if operation == "" {
@@ -57,7 +57,7 @@ func Perform(args Arguments, writer io.Writer) (err error) {
 	}
 
 	f, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0644)
-	err = check(err)
+	error = check(err)
 	defer f.Close()
 	switch operation {
 	case "add":
@@ -66,9 +66,9 @@ func Perform(args Arguments, writer io.Writer) (err error) {
 			return fmt.Errorf("-item flag has to be specified")
 		}
 		var user User
-		err = json.Unmarshal([]byte(item), &user)
+		error = json.Unmarshal([]byte(item), &user)
 		var users []User
-		err = json.Unmarshal(list(f), &users)
+		error = json.Unmarshal(list(f), &users)
 		for _, value := range users {
 			if value.id == user.id {
 				return fmt.Errorf("Item with id %s already exists", user.id)
@@ -76,7 +76,7 @@ func Perform(args Arguments, writer io.Writer) (err error) {
 		}
 		users = append(users, user)
 		bytes, err := json.Marshal(users)
-		err = check(err)
+		error = check(err)
 		return ioutil.WriteFile(filename, bytes, 0)
 	case "remove":
 		id := args["id"]
@@ -91,19 +91,19 @@ func Perform(args Arguments, writer io.Writer) (err error) {
 			}
 		}
 		bytes, err := json.Marshal(users)
-		err = check(err)
+		error = check(err)
 		return ioutil.WriteFile(filename, bytes, 0)
 	case "list":
 		users := list(f)
 		_, err := writer.Write(users)
-		err = check(err)
+		error = check(err)
 	case "findById":
 		id := args["id"]
 		if id == "" {
 			return errors.New("-id flag has to be specified")
 		}
 		var users []User
-		err = json.Unmarshal(list(f), &users)
+		error = json.Unmarshal(list(f), &users)
 		var user User
 		for _, value := range users {
 			if value.id == id {
@@ -114,11 +114,11 @@ func Perform(args Arguments, writer io.Writer) (err error) {
 		userBytes := []byte("")
 		if user.id != "" {
 			bytes, err := json.Marshal(user)
-			err = check(err)
+			error = check(err)
 			userBytes = bytes
 		}
 		_, err = writer.Write(userBytes)
-		err = check(err)
+		error = check(err)
 	default:
 		return fmt.Errorf("Operation %s not allowed!", operation)
 	}
