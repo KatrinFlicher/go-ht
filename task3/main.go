@@ -20,23 +20,23 @@ type User struct {
 
 func parseArgs() Arguments {
 	operation := flag.String("operation", "", "Operation")
-	filename := flag.String("filename", "", "Filename")
+	filename := flag.String("fileName", "", "Filename")
 	item := flag.String("item", "", "Item of User")
 	id := flag.String("id", "", "User id")
 	flag.Parse()
 	return Arguments{
 		"operation": *operation,
-		"filename":  *filename,
+		"fileName":  *filename,
 		"item":      *item,
 		"id":        *id,
 	}
-
 }
 
-func check(e error) {
+func check(e error) (err error) {
 	if e != nil {
-		panic(e)
+		err = e
 	}
+	return
 }
 
 func list(f *os.File) []byte {
@@ -46,7 +46,7 @@ func list(f *os.File) []byte {
 }
 
 func Perform(args Arguments, writer io.Writer) (err error) {
-	filename := args["filename"]
+	filename := args["fileName"]
 	operation := args["operation"]
 	if operation == "" {
 		return fmt.Errorf("-operation flag has to be specified")
@@ -57,7 +57,7 @@ func Perform(args Arguments, writer io.Writer) (err error) {
 	}
 
 	f, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0644)
-	check(err)
+	err = check(err)
 	defer f.Close()
 	switch operation {
 	case "add":
@@ -76,10 +76,8 @@ func Perform(args Arguments, writer io.Writer) (err error) {
 		}
 		users = append(users, user)
 		bytes, err := json.Marshal(users)
-		check(err)
-		err = ioutil.WriteFile(filename, bytes, 0644)
-		check(err)
-		check(err)
+		err = check(err)
+		return ioutil.WriteFile(filename, bytes, 0)
 	case "remove":
 		id := args["id"]
 		if id == "" {
@@ -93,13 +91,12 @@ func Perform(args Arguments, writer io.Writer) (err error) {
 			}
 		}
 		bytes, err := json.Marshal(users)
-		check(err)
-		err = ioutil.WriteFile(filename, bytes, 0644)
-		check(err)
+		err = check(err)
+		return ioutil.WriteFile(filename, bytes, 0)
 	case "list":
 		users := list(f)
 		_, err := writer.Write(users)
-		check(err)
+		err = check(err)
 	case "findById":
 		id := args["id"]
 		if id == "" {
@@ -111,12 +108,17 @@ func Perform(args Arguments, writer io.Writer) (err error) {
 		for _, value := range users {
 			if value.id == id {
 				user = value
+				break
 			}
 		}
-		bytes, err := json.Marshal(user)
-		check(err)
-		_, err = writer.Write(bytes)
-		check(err)
+		userBytes := []byte("")
+		if user.id != "" {
+			bytes, err := json.Marshal(user)
+			err = check(err)
+			userBytes = bytes
+		}
+		_, err = writer.Write(userBytes)
+		err = check(err)
 	default:
 		return fmt.Errorf("Operation %s not allowed!", operation)
 	}
