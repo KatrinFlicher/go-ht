@@ -13,9 +13,9 @@ import (
 type Arguments map[string]string
 
 type User struct {
-	id    string `json:"id"`
-	email string `json:"email"`
-	age   int    `json:"age"`
+	Id    string `json:"id"`
+	Email string `json:"email"`
+	Age   int    `json:"age"`
 }
 
 func parseArgs() Arguments {
@@ -39,26 +39,19 @@ func check(e error) (err error) {
 	return
 }
 
-func list(f *os.File) []byte {
-	bytes, err := ioutil.ReadAll(f)
-	check(err)
-	return bytes
+func list(fileName string) ([]byte, error) {
+	return ioutil.ReadFile(fileName)
 }
 
 func Perform(args Arguments, writer io.Writer) (error error) {
-	filename := args["fileName"]
 	operation := args["operation"]
 	if operation == "" {
 		return fmt.Errorf("-operation flag has to be specified")
 	}
-
+	filename := args["fileName"]
 	if filename == "" {
 		return fmt.Errorf("-fileName flag has to be specified")
 	}
-
-	f, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0644)
-	error = check(err)
-	defer f.Close()
 	switch operation {
 	case "add":
 		item := args["item"]
@@ -68,33 +61,51 @@ func Perform(args Arguments, writer io.Writer) (error error) {
 		var user User
 		error = json.Unmarshal([]byte(item), &user)
 		var users []User
-		error = json.Unmarshal(list(f), &users)
+		bytes, err := list(filename)
+		error = check(err)
+		error = json.Unmarshal(bytes, &users)
+		sameId := false
 		for _, value := range users {
-			if value.id == user.id {
-				return fmt.Errorf("Item with id %s already exists", user.id)
+			if value.Id == user.Id {
+				errStr := "Item with id " + user.Id + " already exists"
+				writer.Write([]byte(errStr))
+				//errStr :=
+				//_, err := writer.Write([]byte(errStr))
+				//error = check(err)
+				sameId = true
 			}
 		}
-		users = append(users, user)
-		bytes, err := json.Marshal(users)
-		error = check(err)
-		return ioutil.WriteFile(filename, bytes, 0)
+		if !sameId {
+			users = append(users, user)
+			bytes, err := json.Marshal(users)
+			error = check(err)
+			ioutil.WriteFile(filename, bytes, 064)
+		}
 	case "remove":
 		id := args["id"]
 		if id == "" {
 			return errors.New("-id flag has to be specified")
 		}
 		var users []User
-		err = json.Unmarshal(list(f), &users)
+		bytesUser, err := list(filename)
+		error = check(err)
+		err = json.Unmarshal(bytesUser, &users)
+		var newUser []User
 		for i, value := range users {
-			if value.id == id {
-				users = append(users[:i], users[i+1:]...)
+			if value.Id == id {
+				newUser = append(users[:i], users[i+1:]...)
 			}
 		}
-		bytes, err := json.Marshal(users)
+		if len(newUser) == 0 {
+			errStr := "Item with id " + id + " not found"
+			writer.Write([]byte(errStr))
+		}
+		bytes, err := json.Marshal(newUser)
 		error = check(err)
 		return ioutil.WriteFile(filename, bytes, 0)
 	case "list":
-		users := list(f)
+		users, err2 := list(filename)
+		error = check(err2)
 		_, err := writer.Write(users)
 		error = check(err)
 	case "findById":
@@ -103,16 +114,18 @@ func Perform(args Arguments, writer io.Writer) (error error) {
 			return errors.New("-id flag has to be specified")
 		}
 		var users []User
-		error = json.Unmarshal(list(f), &users)
+		bytes, err := list(filename)
+		error = check(err)
+		error = json.Unmarshal(bytes, &users)
 		var user User
 		for _, value := range users {
-			if value.id == id {
+			if value.Id == id {
 				user = value
 				break
 			}
 		}
 		userBytes := []byte("")
-		if user.id != "" {
+		if user.Id != "" {
 			bytes, err := json.Marshal(user)
 			error = check(err)
 			userBytes = bytes
