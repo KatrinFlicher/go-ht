@@ -42,28 +42,30 @@ func utility(args Arguments) (results []Result) {
 	//for _, value := range args.Addresses {
 	var wg sync.WaitGroup
 	wg.Add(args.NumRequest)
+	var mutex = &sync.Mutex{}
 	var countNoResp int
-	respTime := make([]time.Duration, args.NumRequest)
+	var respTime []time.Duration
 	var totalRuntime time.Duration
-	fmt.Println("Start", args)
-	for i := 0; i <= args.NumRequest; i++ {
+	for i := 0; i < args.NumRequest; i++ {
 		go func(group *sync.WaitGroup) {
 			defer wg.Done()
 			start := time.Now()
 			resp, err := client.Get(args.Adr)
+			//resp.StatusCode
+			defer resp.Body.Close()
 			duration := time.Since(start)
+			mutex.Lock()
 			if err != nil {
 				countNoResp++
 			}
-			defer resp.Body.Close()
-			fmt.Println(duration)
 			respTime = append(respTime, duration)
 			totalRuntime = totalRuntime + duration
-			fmt.Println(totalRuntime)
+			mutex.Unlock()
 		}(&wg)
 	}
+	wg.Wait()
 	sort.Slice(respTime, func(i, j int) bool { return respTime[i] < respTime[j] })
-	fmt.Println("Finish")
+	fmt.Println(respTime)
 	results = append(results, Result{
 		TotalRuntime: totalRuntime,
 		AverageTime:  time.Duration(int(totalRuntime) / len(respTime)),
@@ -89,15 +91,16 @@ func printResults(results []Result) {
 func parseArgs() Arguments {
 	//var addresses arrayFlags
 	//flag.Var(&addresses, "address", "Addresses for request")
-	adr := *flag.String("address", "https://www.google.com/", "Addresses for request")
-	numRequest := *flag.Int("numRequest", 20, "Number of requests")
+	//"https://www.google.com/"
+	adr := *flag.String("add", "", "Addresses for request")
+	numRequest := *flag.Int("num", 20, "Number of requests")
 	//timeOut := time.Duration(*flag.Int("timeOut", 200, "Timeout of request"))
 	timeOut := time.Duration(20)
 	flag.Parse()
 	if adr == "" {
 		panic("There are not addresses for calling")
 	}
-
+	adr = "https://" + adr
 	if numRequest == 5 {
 		fmt.Println("App use default value of number of requests")
 	}
