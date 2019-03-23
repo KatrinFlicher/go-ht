@@ -32,7 +32,7 @@ type InfoRequests struct {
 	URI          string
 }
 
-func makeRequest(client *http.Client, info *InfoRequests, wg *sync.WaitGroup) {
+func makeRequest(client http.Client, info *InfoRequests, wg *sync.WaitGroup) {
 	defer wg.Done()
 	start := time.Now()
 	resp, err := client.Get(info.URI)
@@ -72,7 +72,7 @@ func utility(args Arguments) (results []Result, arguments Arguments) {
 			URI:   value,
 		}
 		for i := 0; i < args.NumRequest; i++ {
-			go makeRequest(client, &info, &wg)
+			go makeRequest(*client, &info, &wg)
 		}
 		wg.Wait()
 		sort.Slice(info.RespTime, func(i, j int) bool { return info.RespTime[i] < info.RespTime[j] })
@@ -102,7 +102,9 @@ func printResults(results []Result, arguments Arguments) {
 	}
 }
 
-func parseArgs() Arguments {
+var initArguments Arguments
+
+func init() {
 	var addresses arrayFlags
 	flag.Var(&addresses, "address", "Addresses for request")
 	numRequest := flag.Int("num", -1, "Number of requests")
@@ -117,14 +119,14 @@ func parseArgs() Arguments {
 	}
 	if *timeOut < 0 {
 		*timeOut = 200
-		fmt.Println("App use default value of timeout (200)")
+		fmt.Println("App use default value of timeout (200ms)")
 	}
-	return Arguments{
+	initArguments = Arguments{
 		Addresses:  addresses,
 		NumRequest: *numRequest,
 		TimeOut:    time.Duration(*timeOut) * time.Millisecond,
 	}
 }
 func main() {
-	printResults(utility(parseArgs()))
+	printResults(utility(initArguments))
 }
