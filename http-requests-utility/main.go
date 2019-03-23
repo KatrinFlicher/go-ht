@@ -24,6 +24,30 @@ type Result struct {
 	CountNoResp  int
 }
 
+type InfoRequests struct {
+	Mutex        sync.Mutex
+	CountNoResp  int
+	RespTime     []time.Duration
+	TotalRuntime time.Duration
+	URI          string
+}
+
+func makeRequest(client *http.Client, info *InfoRequests, wg *sync.WaitGroup) {
+	defer wg.Done()
+	start := time.Now()
+	resp, err := client.Get(info.URI)
+	duration := time.Since(start)
+	info.Mutex.Lock()
+	if err != nil {
+		info.CountNoResp++
+	} else {
+		defer resp.Body.Close()
+	}
+	info.RespTime = append(info.RespTime, duration)
+	info.TotalRuntime = info.TotalRuntime + duration
+	info.Mutex.Unlock()
+}
+
 type arrayFlags []string
 
 func (f *arrayFlags) String() string {
@@ -38,43 +62,30 @@ func (f *arrayFlags) Set(value string) error {
 
 func utility(args Arguments) (results []Result, arguments Arguments) {
 	client := &http.Client{
-		Timeout: args.TimeOut * time.Second,
+		Timeout: args.TimeOut,
 	}
 	for _, value := range args.Addresses {
 		var wg sync.WaitGroup
 		wg.Add(args.NumRequest)
-		var mutex = &sync.Mutex{}
-		var countNoResp int
-		var respTime []time.Duration
-		var totalRuntime time.Duration
+		info := InfoRequests{
+			Mutex: sync.Mutex{},
+			URI:   value,
+		}
 		for i := 0; i < args.NumRequest; i++ {
-			go func(group *sync.WaitGroup) {
-				defer wg.Done()
-				start := time.Now()
-				resp, err := client.Get(value)
-				defer resp.Body.Close()
-				duration := time.Since(start)
-				mutex.Lock()
-				if err != nil {
-					countNoResp++
-				}
-				respTime = append(respTime, duration)
-				totalRuntime = totalRuntime + duration
-				mutex.Unlock()
-			}(&wg)
+			go makeRequest(client, &info, &wg)
 		}
 		wg.Wait()
-		sort.Slice(respTime, func(i, j int) bool { return respTime[i] < respTime[j] })
+		sort.Slice(info.RespTime, func(i, j int) bool { return info.RespTime[i] < info.RespTime[j] })
 		results = append(results, Result{
 			Address:      value,
-			TotalRuntime: totalRuntime,
-			AverageTime:  time.Duration(int(totalRuntime) / len(respTime)),
-			MaxRespTime:  respTime[len(respTime)-1],
-			MinRespTime:  respTime[0],
-			CountNoResp:  countNoResp,
+			TotalRuntime: info.TotalRuntime,
+			AverageTime:  time.Duration(int(info.TotalRuntime) / len(info.RespTime)),
+			MaxRespTime:  info.RespTime[len(info.RespTime)-1],
+			MinRespTime:  info.RespTime[0],
+			CountNoResp:  info.CountNoResp,
 		})
-		fmt.Println(results)
 	}
+	arguments = args
 	return
 }
 
@@ -95,7 +106,7 @@ func parseArgs() Arguments {
 	var addresses arrayFlags
 	flag.Var(&addresses, "address", "Addresses for request")
 	numRequest := flag.Int("num", -1, "Number of requests")
-	timeOut := time.Duration(*flag.Int("timeOut", -1, "Timeout of request"))
+	timeOut := flag.Int("timeout", -1, "Timeout of request")
 	flag.Parse()
 	if addresses == nil {
 		panic("There are not addresses for calling")
@@ -104,14 +115,14 @@ func parseArgs() Arguments {
 		*numRequest = 20
 		fmt.Println("App use default value of number of requests (20)")
 	}
-	if timeOut < 0 {
-		timeOut = time.Duration(200)
+	if *timeOut < 0 {
+		*timeOut = 200
 		fmt.Println("App use default value of timeout (200)")
 	}
 	return Arguments{
 		Addresses:  addresses,
 		NumRequest: *numRequest,
-		TimeOut:    timeOut,
+		TimeOut:    time.Duration(*timeOut) * time.Millisecond,
 	}
 }
 func main() {
